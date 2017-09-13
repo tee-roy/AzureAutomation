@@ -377,11 +377,15 @@ try
     #attempt to create workflow and run in parallel
     workflow StartStopVMs-Workflow
     {
+        #testing output below
+        Write-Output "start of workflow before foreach -parallel"
         #foreach -Parallel added here
         foreach -Parallel($vm in $resourceManagerVMList)
         {
             $schedule = $null
 
+            #testing output below
+            Write-Output "inside of foreach -parallel loop"
             # Check for direct tag or group-inherited tag
             if($vm.ResourceType -eq "Microsoft.Compute/virtualMachines" -and $vm.Tags -and $vm.Tags.Name -contains "AutoShutdownSchedule")
             {
