@@ -375,17 +375,17 @@ try
     Write-Output "Processing [$($resourceManagerVMList.Count)] virtual machines found in subscription"
 
     #attempt to create workflow and run in parallel
-    workflow StartStopVMs-Workflow
-    {
+    #workflow StartStopVMs-Workflow
+    #{
         #testing output below
-        Write-Output "start of workflow before foreach -parallel"
+      #  Write-Output "start of workflow before foreach -parallel"
         #foreach -Parallel added here
         foreach -Parallel($vm in $resourceManagerVMList)
         {
             $schedule = $null
 
             #testing output below
-            Write-Output "inside of foreach -parallel loop"
+      #      Write-Output "inside of foreach -parallel loop"
             # Check for direct tag or group-inherited tag
             if($vm.ResourceType -eq "Microsoft.Compute/virtualMachines" -and $vm.Tags -and $vm.Tags.Name -contains "AutoShutdownSchedule")
             {
@@ -404,6 +404,7 @@ try
             {
                 # No direct or inherited tag. Skip this VM.
                 Write-Output "[$($vm.Name)]: Not tagged for shutdown directly or via membership in a tagged resource group. Skipping this VM."
+                continue
                 #continue - taking out continue for parallel processing
             }
 
@@ -411,6 +412,7 @@ try
             if($schedule -eq $null)
             {
                 Write-Output "[$($vm.Name)]: Failed to get tagged schedule for virtual machine. Skipping this VM."
+                continue
                 #continue - taking out continue for parallel processing
             }
 
@@ -426,6 +428,7 @@ try
                 {
                     $scheduleMatched = $true
                     $matchedSchedule = $entry
+                    break
                     #break - taking out break for parallel processing
                 }
             }
@@ -444,7 +447,7 @@ try
                 AssertVirtualMachinePowerState -VirtualMachine $vm -DesiredState "Started" -ResourceManagerVMList $resourceManagerVMList -ClassicVMList $classicVMList -Simulate $Simulate
             }	    
         }
-    }
+    #}
     #end of Parallel workflow
 
         Write-Output "Finished processing virtual machine schedules"
