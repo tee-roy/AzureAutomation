@@ -373,71 +373,78 @@ try
     #  - Is the current time within the tagged schedule 
     # Then assert its correct power state based on the assigned schedule (if present)
     Write-Output "Processing [$($resourceManagerVMList.Count)] virtual machines found in subscription"
-    foreach($vm in $resourceManagerVMList)
+
+    #attempt to create workflow and run in parallel
+    workflow StartStopVMs-Workflow
     {
-        $schedule = $null
-
-        # Check for direct tag or group-inherited tag
-        if($vm.ResourceType -eq "Microsoft.Compute/virtualMachines" -and $vm.Tags -and $vm.Tags.Name -contains "AutoShutdownSchedule")
+        #foreach -Parallel added here
+        foreach -Parallel ($vm in $resourceManagerVMList)
         {
-            # VM has direct tag (possible for resource manager deployment model VMs). Prefer this tag schedule.
-            $schedule = ($vm.Tags | where Name -eq "AutoShutdownSchedule")["Value"]
-            Write-Output "[$($vm.Name)]: Found direct VM schedule tag with value: $schedule"
-        }
-        elseif($taggedResourceGroupNames -contains $vm.ResourceGroupName)
-        {
-            # VM belongs to a tagged resource group. Use the group tag
-            $parentGroup = $taggedResourceGroups | where ResourceGroupName -eq $vm.ResourceGroupName
-            $schedule = ($parentGroup.Tags | where Name -eq "AutoShutdownSchedule")["Value"]
-            Write-Output "[$($vm.Name)]: Found parent resource group schedule tag with value: $schedule"
-        }
-        else
-        {
-            # No direct or inherited tag. Skip this VM.
-            Write-Output "[$($vm.Name)]: Not tagged for shutdown directly or via membership in a tagged resource group. Skipping this VM."
-            continue
-        }
+            $schedule = $null
 
-        # Check that tag value was succesfully obtained
-        if($schedule -eq $null)
-        {
-            Write-Output "[$($vm.Name)]: Failed to get tagged schedule for virtual machine. Skipping this VM."
-            continue
+            # Check for direct tag or group-inherited tag
+            if($vm.ResourceType -eq "Microsoft.Compute/virtualMachines" -and $vm.Tags -and $vm.Tags.Name -contains "AutoShutdownSchedule")
+            {
+                # VM has direct tag (possible for resource manager deployment model VMs). Prefer this tag schedule.
+                $schedule = ($vm.Tags | where Name -eq "AutoShutdownSchedule")["Value"]
+                Write-Output "[$($vm.Name)]: Found direct VM schedule tag with value: $schedule"
+            }
+            elseif($taggedResourceGroupNames -contains $vm.ResourceGroupName)
+            {
+                # VM belongs to a tagged resource group. Use the group tag
+                $parentGroup = $taggedResourceGroups | where ResourceGroupName -eq $vm.ResourceGroupName
+                $schedule = ($parentGroup.Tags | where Name -eq "AutoShutdownSchedule")["Value"]
+                Write-Output "[$($vm.Name)]: Found parent resource group schedule tag with value: $schedule"
+            }
+            else
+            {
+                # No direct or inherited tag. Skip this VM.
+                Write-Output "[$($vm.Name)]: Not tagged for shutdown directly or via membership in a tagged resource group. Skipping this VM."
+                continue
+            }
+
+            # Check that tag value was succesfully obtained
+            if($schedule -eq $null)
+            {
+                Write-Output "[$($vm.Name)]: Failed to get tagged schedule for virtual machine. Skipping this VM."
+                continue
+            }
+
+            # Parse the ranges in the Tag value. Expects a string of comma-separated time ranges, or a single time range
+            $timeRangeList = @($schedule -split "," | foreach {$_.Trim()})
+            
+            # Check each range against the current time to see if any schedule is matched
+            $scheduleMatched = $false
+            $matchedSchedule = $null
+            foreach($entry in $timeRangeList)
+            {
+                if((CheckScheduleEntry -TimeRange $entry) -eq $true)
+                {
+                    $scheduleMatched = $true
+                    $matchedSchedule = $entry
+                    break
+                }
+            }
+
+            # Enforce desired state for group resources based on result. 
+            if($scheduleMatched)
+            {
+                # Schedule is matched. Shut down the VM if it is running. 
+                Write-Output "[$($vm.Name)]: Current time [$currentTime] falls within the scheduled shutdown range [$matchedSchedule]"
+                AssertVirtualMachinePowerState -VirtualMachine $vm -DesiredState "StoppedDeallocated" -ResourceManagerVMList $resourceManagerVMList -ClassicVMList $classicVMList -Simulate $Simulate
+            }
+            else
+            {
+                # Schedule not matched. Start VM if stopped.
+                Write-Output "[$($vm.Name)]: Current time falls outside of all scheduled shutdown ranges."
+                AssertVirtualMachinePowerState -VirtualMachine $vm -DesiredState "Started" -ResourceManagerVMList $resourceManagerVMList -ClassicVMList $classicVMList -Simulate $Simulate
+            }	    
         }
-
-        # Parse the ranges in the Tag value. Expects a string of comma-separated time ranges, or a single time range
-		$timeRangeList = @($schedule -split "," | foreach {$_.Trim()})
-	    
-        # Check each range against the current time to see if any schedule is matched
-		$scheduleMatched = $false
-        $matchedSchedule = $null
-		foreach($entry in $timeRangeList)
-		{
-		    if((CheckScheduleEntry -TimeRange $entry) -eq $true)
-		    {
-		        $scheduleMatched = $true
-                $matchedSchedule = $entry
-		        break
-		    }
-		}
-
-        # Enforce desired state for group resources based on result. 
-		if($scheduleMatched)
-		{
-            # Schedule is matched. Shut down the VM if it is running. 
-		    Write-Output "[$($vm.Name)]: Current time [$currentTime] falls within the scheduled shutdown range [$matchedSchedule]"
-		    AssertVirtualMachinePowerState -VirtualMachine $vm -DesiredState "StoppedDeallocated" -ResourceManagerVMList $resourceManagerVMList -ClassicVMList $classicVMList -Simulate $Simulate
-		}
-		else
-		{
-            # Schedule not matched. Start VM if stopped.
-		    Write-Output "[$($vm.Name)]: Current time falls outside of all scheduled shutdown ranges."
-		    AssertVirtualMachinePowerState -VirtualMachine $vm -DesiredState "Started" -ResourceManagerVMList $resourceManagerVMList -ClassicVMList $classicVMList -Simulate $Simulate
-		}	    
     }
+    #end of Parallel workflow
 
-    Write-Output "Finished processing virtual machine schedules"
-}
+        Write-Output "Finished processing virtual machine schedules"
+    }
 catch
 {
     $errorMessage = $_.Exception.Message
