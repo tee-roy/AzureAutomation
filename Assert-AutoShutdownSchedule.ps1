@@ -378,7 +378,7 @@ try
     workflow StartStopVMs-Workflow
     {
         #foreach -Parallel added here
-        foreach -Parallel ($vm in $resourceManagerVMList)
+        foreach -Parallel($vm in $resourceManagerVMList)
         {
             $schedule = $null
 
