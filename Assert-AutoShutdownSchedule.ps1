@@ -400,14 +400,14 @@ try
             {
                 # No direct or inherited tag. Skip this VM.
                 Write-Output "[$($vm.Name)]: Not tagged for shutdown directly or via membership in a tagged resource group. Skipping this VM."
-                continue
+                #continue - taking out continue for parallel processing
             }
 
             # Check that tag value was succesfully obtained
             if($schedule -eq $null)
             {
                 Write-Output "[$($vm.Name)]: Failed to get tagged schedule for virtual machine. Skipping this VM."
-                continue
+                #continue - taking out continue for parallel processing
             }
 
             # Parse the ranges in the Tag value. Expects a string of comma-separated time ranges, or a single time range
@@ -422,7 +422,7 @@ try
                 {
                     $scheduleMatched = $true
                     $matchedSchedule = $entry
-                    break
+                    #break - taking out break for parallel processing
                 }
             }
 
