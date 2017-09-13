@@ -380,7 +380,7 @@ try
         #testing output below
       #  Write-Output "start of workflow before foreach -parallel"
         #foreach -Parallel added here
-        foreach -Parallel($vm in $resourceManagerVMList)
+        foreach($vm in $resourceManagerVMList)
         {
             $schedule = $null
 
